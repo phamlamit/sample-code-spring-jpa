@@ -4,23 +4,33 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import vn.tayjava.configuration.Translator;
 import vn.tayjava.dto.request.AddressDTO;
 import vn.tayjava.dto.request.UserRequestDTO;
 import vn.tayjava.dto.response.PageResponse;
+import vn.tayjava.dto.response.ResponseData;
 import vn.tayjava.dto.response.UserDetailResponse;
 import vn.tayjava.exception.ResourceNotFoundException;
 import vn.tayjava.model.Address;
 import vn.tayjava.model.User;
+import vn.tayjava.repository.SearchRepository;
 import vn.tayjava.repository.UserRepository;
+import vn.tayjava.repository.UserSpecification;
 import vn.tayjava.service.UserService;
 import vn.tayjava.util.UserStatus;
 import vn.tayjava.util.UserType;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -28,6 +38,8 @@ import java.util.Set;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+
+    private final SearchRepository searchRepository;
 
     /**
      * Save new user to DB
@@ -129,20 +141,9 @@ public class UserServiceImpl implements UserService {
      * @return
      */
     @Override
-    public UserDetailResponse getUser(long userId) {
+    public User getUser(long userId) {
         User user = getUserById(userId);
-        return UserDetailResponse.builder()
-                .id(userId)
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .dateOfBirth(user.getDateOfBirth())
-                .gender(user.getGender())
-                .phone(user.getPhone())
-                .email(user.getEmail())
-                .username(user.getUsername())
-                .status(user.getStatus())
-                .type(user.getType().name())
-                .build();
+        return user;
     }
 
     /**
@@ -150,12 +151,30 @@ public class UserServiceImpl implements UserService {
      *
      * @param pageNo
      * @param pageSize
+     * @param softBy
      * @return
      */
     @Override
-    public PageResponse getAllUsers(int pageNo, int pageSize) {
-        Page<User> page = userRepository.findAll(PageRequest.of(pageNo, pageSize));
+    public PageResponse getAllUsers(int pageNo, int pageSize, String softBy) {
 
+
+        List<Sort.Order> sorts = new ArrayList<>();
+        //Neu co gia tri
+        if (StringUtils.hasLength(softBy)) {
+            //firstName:asc||desc
+            Pattern pattern = Pattern.compile("(\\w+?)(:)(.*)");
+            Matcher matcher = pattern.matcher(softBy);
+            if (matcher.find()) {
+                if (matcher.group(3).equalsIgnoreCase("asc")) {
+                    sorts.add(new Sort.Order(Sort.Direction.ASC, matcher.group(1)));
+                } else {
+                    sorts.add(new Sort.Order(Sort.Direction.DESC, matcher.group(1)));
+                }
+            }
+        }
+
+        Pageable pageable = PageRequest.of(pageNo, pageSize, Sort.by(sorts));
+        Page<User> page = userRepository.findAll(pageable);
         List<UserDetailResponse> list = page.stream().map(user -> UserDetailResponse.builder()
                         .id(user.getId())
                         .firstName(user.getFirstName())
@@ -176,6 +195,58 @@ public class UserServiceImpl implements UserService {
                 .totalPage(page.getTotalPages())
                 .items(list)
                 .build();
+    }
+
+    @Override
+    public PageResponse getAllUsersWithMultiSortColumns(int pageNo, int pageSize, String... softBy) {
+        List<Sort.Order> orders = new ArrayList<>();
+
+        for (String s : softBy) {
+            //firstName:asc||desc
+            Pattern pattern = Pattern.compile("(\\w+?)(:)(.*)");
+            Matcher matcher = pattern.matcher(s);
+            if (matcher.find()) {
+                if (matcher.group(3).equalsIgnoreCase("asc")) {
+                    orders.add(new Sort.Order(Sort.Direction.ASC, matcher.group(1)));
+                } else {
+                    orders.add(new Sort.Order(Sort.Direction.DESC, matcher.group(1)));
+                }
+            }
+        }
+
+        Pageable pageable = PageRequest.of(pageNo, pageSize, Sort.by(orders));
+        Page<User> page = userRepository.findAll(pageable);
+        List<UserDetailResponse> list = page.stream().map(user -> UserDetailResponse.builder()
+                        .id(user.getId())
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .dateOfBirth(user.getDateOfBirth())
+                        .gender(user.getGender())
+                        .phone(user.getPhone())
+                        .email(user.getEmail())
+                        .username(user.getUsername())
+                        .status(user.getStatus())
+                        .type(user.getType().name())
+                        .build())
+                .toList();
+
+        return PageResponse.builder()
+                .pageNo(pageNo)
+                .pageSize(pageSize)
+                .totalPage(page.getTotalPages())
+                .items(list)
+                .build();
+    }
+
+    @Override
+    public PageResponse<?> advanceSearchByCriteria(int pageNo, int pageSize, String softBy, String... search) {
+        return searchRepository.advanceSearchByCriteria(pageNo, pageSize, softBy, search);
+    }
+
+    @Override
+    public List<User> getAllUsersBySorting(String sortType) {
+        Specification<User> spec = UserSpecification.sortByRole(sortType);
+        return userRepository.findAll(spec);
     }
 
     /**

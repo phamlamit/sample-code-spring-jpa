@@ -15,8 +15,12 @@ import vn.tayjava.dto.response.PageResponse;
 import vn.tayjava.dto.response.ResponseData;
 import vn.tayjava.dto.response.ResponseError;
 import vn.tayjava.dto.response.UserDetailResponse;
+import vn.tayjava.model.User;
+import vn.tayjava.repository.SearchRepository;
 import vn.tayjava.service.UserService;
 import vn.tayjava.util.UserStatus;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/user")
@@ -27,6 +31,7 @@ import vn.tayjava.util.UserStatus;
 public class UserController {
 
     private final UserService userService;
+    private final SearchRepository searchRepository;
 
     private static final String ERROR_MESSAGE = "errorMessage={}";
 
@@ -87,11 +92,11 @@ public class UserController {
 
     @Operation(summary = "Get user detail", description = "Send a request via this API to get user information")
     @GetMapping("/{userId}")
-    public ResponseData<UserDetailResponse> getUser(@PathVariable @Min(1) long userId) {
+    public ResponseData<User> getUser(@PathVariable @Min(1) long userId) {
         log.info("Request get user detail, userId={}", userId);
 
         try {
-            UserDetailResponse user = userService.getUser(userId);
+            User user = userService.getUser(userId);
             return new ResponseData<>(HttpStatus.OK.value(), "user", user);
         } catch (Exception e) {
             log.error(ERROR_MESSAGE, e.getMessage(), e.getCause());
@@ -102,15 +107,66 @@ public class UserController {
     @Operation(summary = "Get list of users per pageNo", description = "Send a request via this API to get user list by pageNo and pageSize")
     @GetMapping("/list")
     public ResponseData<PageResponse> getAllUsers(@RequestParam(defaultValue = "0", required = false) int pageNo,
-                                                  @Min(10) @RequestParam(defaultValue = "20", required = false) int pageSize) {
+                                                  @Min(10) @RequestParam(defaultValue = "20", required = false) int pageSize,
+                                                  @RequestParam(required = false) String softBy) {
         log.info("Request get user list, pageNo={}, pageSize={}", pageNo, pageSize);
-
         try {
-            PageResponse<?> users = userService.getAllUsers(pageNo, pageSize);
+            PageResponse<?> users = userService.getAllUsers(pageNo, pageSize, softBy);
             return new ResponseData<>(HttpStatus.OK.value(), "users", users);
         } catch (Exception e) {
             log.error(ERROR_MESSAGE, e.getMessage(), e.getCause());
             return new ResponseError(HttpStatus.BAD_REQUEST.value(), e.getMessage());
         }
+    }
+
+    @Operation(summary = "Get list of users per pageNo", description = "Send a request via this API to get user list by pageNo and pageSize")
+    @GetMapping("/list-multi-sorts")
+    public ResponseData<PageResponse> getAllUsersWithMultiSorts(@RequestParam(defaultValue = "0", required = false) int pageNo,
+                                                                @Min(10) @RequestParam(defaultValue = "20", required = false) int pageSize,
+                                                                @RequestParam(required = false) String... softBy) {
+        log.info("Request get user list, pageNo={}, pageSize={}", pageNo, pageSize);
+        try {
+            PageResponse<?> users = userService.getAllUsersWithMultiSortColumns(pageNo, pageSize, softBy);
+            return new ResponseData<>(HttpStatus.OK.value(), "users", users);
+        } catch (Exception e) {
+            log.error(ERROR_MESSAGE, e.getMessage(), e.getCause());
+            return new ResponseError(HttpStatus.BAD_REQUEST.value(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Get list of users per pageNo", description = "Send a request via this API to get user list by pageNo and pageSize")
+    @GetMapping("/search")
+    public ResponseData<PageResponse> getAllUsers(@RequestParam(defaultValue = "0", required = false) int pageNo,
+                                                  @Min(10) @RequestParam(defaultValue = "20", required = false) int pageSize,
+                                                  @RequestParam(required = false) String search,
+                                                  @RequestParam(required = false) String softBy) {
+        log.info("Request get user list, pageNo={}, pageSize={}", pageNo, pageSize);
+        try {
+            PageResponse<?> users = searchRepository.getAllUserSWithSoftByColumnAndSearch(pageNo, pageSize, search, softBy);
+            return new ResponseData<>(HttpStatus.OK.value(), "users", users);
+        } catch (Exception e) {
+            log.error(ERROR_MESSAGE, e.getMessage(), e.getCause());
+            return new ResponseError(HttpStatus.BAD_REQUEST.value(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Get list of users per pageNo", description = "Send a request via this API to get user list by pageNo and pageSize")
+    @GetMapping("/advance-search")
+    public ResponseData<PageResponse> getAllUsersAdvanceSearch(@RequestParam(defaultValue = "0", required = false) int pageNo,
+                                                               @Min(10) @RequestParam(defaultValue = "20", required = false) int pageSize,
+                                                               @RequestParam(required = false) String softBy,
+                                                               @RequestParam(required = false, defaultValue = "") String... search) {
+        log.info("Request get user list, pageNo={}, pageSize={}", pageNo, pageSize);
+        try {
+            PageResponse<?> users = userService.advanceSearchByCriteria(pageNo, pageSize, softBy, search);
+            return new ResponseData<>(HttpStatus.OK.value(), "users", users);
+        } catch (Exception e) {
+            log.error(ERROR_MESSAGE, e.getMessage(), e.getCause());
+            return new ResponseError(HttpStatus.BAD_REQUEST.value(), e.getMessage());
+        }
+    }
+    @GetMapping("/get-list-user")
+    public List<User> getAllUsersBySorting(@RequestParam String sortType){
+        return userService.getAllUsersBySorting(sortType);
     }
 }
